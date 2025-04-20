@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+bleak
+scapy
+pyyaml
+websockets
+psutil
+python-dotenv

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>SDRGuardian Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #charts { display: flex; flex-wrap: wrap; gap: 20px; }
+    .chart-section { width: 30%; min-width: 300px; }
+    .chart { width: 100%; height: 300px; }
+    #alerts { max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; }
+    section { margin-bottom: 20px; }
+    h3 { margin: 0 0 5px; }
+    p.desc { margin: 0 0 10px; font-size: 0.9em; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>SDRGuardian Dashboard</h1>
+  <div id="charts">
+    <section class="chart-section">
+      <h3>Wi-Fi Networks</h3>
+      <p class="desc">Detected SSID vs signal strength (RSSI in dBm).</p>
+      <div id="wifi-chart" class="chart"></div>
+    </section>
+    <section class="chart-section">
+      <h3>Bluetooth Devices</h3>
+      <p class="desc">Discovered BLE device address vs signal strength (RSSI in dBm).</p>
+      <div id="bluetooth-chart" class="chart"></div>
+    </section>
+    <section class="chart-section">
+      <h3>IMU Acceleration</h3>
+      <p class="desc">Acceleration magnitude over time (m/s²).</p>
+      <div id="imu-chart" class="chart"></div>
+    </section>
+  </div>
+  <h2>Alerts</h2>
+  <ul id="alerts"></ul>
+
+  <h2>Summary</h2>
+  <ul id="summary"></ul>
+
+  <h2>Settings</h2>
+  <form id="settings-form">
+    <label>Wi-Fi Interval (s): <input type="number" id="wifi-interval" step="0.1"/></label><br/>
+    <label>Bluetooth Interval (s): <input type="number" id="bluetooth-interval" step="0.1"/></label><br/>
+    <label>IMU Interval (s): <input type="number" id="imu-interval" step="0.1"/></label><br/>
+    <label>LLM Model: <input type="text" id="llm-model"/></label><br/>
+    <label>Wi-Fi RSSI Min: <input type="number" id="wifi-rssi-min"/></label><br/>
+    <label>Bluetooth RSSI Min: <input type="number" id="bt-rssi-min"/></label><br/>
+    <label>IMU Accel Max: <input type="number" step="0.1" id="imu-accel-max"/></label><br/>
+    <button type="submit">Save Settings</button> <span id="settings-status"></span>
+  </form>
+  <script>
+    const ws = new WebSocket(`ws://${location.host}/ws`);
+    // Load current settings
+    fetch('/settings')
+      .then(res => res.json())
+      .then(conf => {
+        document.getElementById('wifi-interval').value = conf.wifi?.interval || '';
+        document.getElementById('bluetooth-interval').value = conf.bluetooth?.interval || '';
+        document.getElementById('imu-interval').value = conf.imu?.interval || '';
+        document.getElementById('llm-model').value = conf.llm?.model || '';
+        document.getElementById('wifi-rssi-min').value = conf.alerts?.thresholds?.wifi?.rssi_min ?? '';
+        document.getElementById('bt-rssi-min').value = conf.alerts?.thresholds?.bluetooth?.rssi_min ?? '';
+        document.getElementById('imu-accel-max').value = conf.alerts?.thresholds?.imu?.accel_max ?? '';
+      });
+
+    // Handle settings form submission
+    document.getElementById('settings-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const new_conf = {
+        wifi: { interval: parseFloat(document.getElementById('wifi-interval').value) },
+        bluetooth: { interval: parseFloat(document.getElementById('bluetooth-interval').value) },
+        imu: { interval: parseFloat(document.getElementById('imu-interval').value) },
+        llm: { model: document.getElementById('llm-model').value },
+        alerts: {
+          thresholds: {
+            wifi: { rssi_min: parseFloat(document.getElementById('wifi-rssi-min').value) },
+            bluetooth: { rssi_min: parseFloat(document.getElementById('bt-rssi-min').value) },
+            imu: { accel_max: parseFloat(document.getElementById('imu-accel-max').value) },
+          }
+        }
+      };
+      fetch('/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(new_conf),
+      })
+      .then(res => res.json())
+      .then(r => {
+        document.getElementById('settings-status').textContent = r.status;
+      });
+    });
+    // Initialize plots
+    Plotly.newPlot('wifi-chart', [{ x: [], y: [], type: 'bar' }], { title: 'Wi-Fi RSSI', xaxis: { title: 'SSID' }, yaxis: { title: 'RSSI (dBm)' } });
+    Plotly.newPlot('bluetooth-chart', [{ x: [], y: [], type: 'bar' }], { title: 'Bluetooth RSSI', xaxis: { title: 'Address' }, yaxis: { title: 'RSSI (dBm)' } });
+    const imuTrace = { x: [], y: [], type: 'scatter', mode: 'lines', name: 'Accel Magnitude' };
+    Plotly.newPlot('imu-chart', [imuTrace], { title: 'IMU Acceleration Magnitude', xaxis: { title: 'Time' }, yaxis: { title: 'Magnitude' } });
+
+    ws.onmessage = event => {
+      const msg = JSON.parse(event.data);
+      // Handle periodic summary messages
+      if (msg.summary) {
+        const summElem = document.getElementById('summary');
+        const events = msg.summary.events || [];
+        events.forEach(e => {
+          const li = document.createElement('li');
+          const ts = e.timestamp
+            ? new Date(e.timestamp * 1000).toLocaleTimeString()
+            : new Date(msg.timestamp * 1000).toLocaleTimeString();
+          const type = e.type || e.sensor || 'event';
+          const desc = e.description || JSON.stringify(e);
+          li.textContent = `[${ts}] ${type}: ${desc}`;
+          summElem.prepend(li);
+        });
+        return;
+      }
+      const rec = msg.record;
+      // Update Wi-Fi chart
+      if (rec.sensor === 'wifi') {
+        const ssids = rec.networks.map(n => n.ssid);
+        const rssis = rec.networks.map(n => n.rssi);
+        Plotly.react('wifi-chart', [{ x: ssids, y: rssis, type: 'bar' }]);
+      }
+      // Update Bluetooth chart
+      else if (rec.sensor === 'bluetooth') {
+        const addrs = rec.devices.map(d => d.address);
+        const rssis = rec.devices.map(d => d.rssi);
+        Plotly.react('bluetooth-chart', [{ x: addrs, y: rssis, type: 'bar' }]);
+      }
+      // Update IMU chart
+      else if (rec.sensor === 'imu') {
+        const a = rec.accel;
+        const mag = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+        const t = new Date(rec.timestamp * 1000).toLocaleTimeString();
+        imuTrace.x.push(t);
+        imuTrace.y.push(mag);
+        Plotly.extendTraces('imu-chart', { x: [[t]], y: [[mag]] }, [0]);
+        if (imuTrace.x.length > 50) {
+          imuTrace.x.shift();
+          imuTrace.y.shift();
+          Plotly.relayout('imu-chart', { 'xaxis.range': [imuTrace.x[0], imuTrace.x[imuTrace.x.length - 1]] });
+        }
+      }
+      // Display alerts
+      const alerts = msg.alerts || [];
+      const alertsElem = document.getElementById('alerts');
+      alerts.forEach(a => {
+        const li = document.createElement('li');
+        const ts = new Date(a.timestamp * 1000).toLocaleTimeString();
+        const txt = a.issue || a.reason || JSON.stringify(a);
+        li.textContent = `[${ts}] ${a.sensor}: ${txt}`;
+        alertsElem.prepend(li);
+      });
+    };
+  </script>
+</body>
+</html>

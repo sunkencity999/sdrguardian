@@ -1,0 +1,17 @@
+# Example systemd service for SDRGuardian (run pipeline mode)
+[Unit]
+Description=SDRGuardian pipeline service
+After=network.target
+
+[Service]
+Type=simple
+# Adjust WorkingDirectory and ExecStart to your installation path
+WorkingDirectory=/path/to/sdrguardian
+ExecStart=/path/to/sdrguardian/.venv/bin/python /path/to/sdrguardian/run.py --mode pipeline
+Restart=on-failure
+User=yourusername
+# Optionally set config path
+Environment=SENSOR_CONF=/path/to/sdrguardian/config.yaml
+
+[Install]
+WantedBy=multi-user.target
