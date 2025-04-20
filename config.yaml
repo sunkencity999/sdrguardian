@@ -6,21 +6,11 @@ alerts:
       accel_max: 9.8
     wifi:
       rssi_min: -70
-    # Network I/O thresholds (bytes per second)
-    netio:
-      rate_sent_max: 100000   # e.g. 100 KB/s
-      rate_recv_max: 100000   # e.g. 100 KB/s
 bluetooth:
   interval: 4.4
 imu:
   interval: 5.5
 llm:
-  model: test-model
+  model: llama3.2:latest
 wifi:
   interval: 3.3
-assoc:
-  interval: 5
-netio:
-  interval: 5
-# Interval in seconds for periodic summary analysis
-summary_interval: 300

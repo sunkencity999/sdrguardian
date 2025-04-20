@@ -21,21 +21,27 @@
     <section class="chart-section">
       <h3>Wi-Fi Networks</h3>
       <p class="desc">Detected SSID vs signal strength (RSSI in dBm).</p>
+      <p class="key"><em>Key:</em> RSSI in dBm (higher is stronger signal).</p>
       <div id="wifi-chart" class="chart"></div>
     </section>
     <section class="chart-section">
       <h3>Bluetooth Devices</h3>
-      <p class="desc">Discovered BLE device address vs signal strength (RSSI in dBm).</p>
+      <p class="desc">Discovered BLE device address vs estimated distance (meters).</p>
+      <p class="key"><em>Key:</em> Estimated distance in meters (lower is closer).</p>
       <div id="bluetooth-chart" class="chart"></div>
     </section>
     <section class="chart-section">
       <h3>IMU Acceleration</h3>
       <p class="desc">Acceleration magnitude over time (m/s²).</p>
+      <p class="key"><em>Key:</em> Magnitude of acceleration vector (m/s²).</p>
       <div id="imu-chart" class="chart"></div>
     </section>
   </div>
   <h2>Alerts</h2>
   <ul id="alerts"></ul>
+
+  <h2>LLM Analysis</h2>
+  <ul id="analysis"></ul>
 
   <h2>Summary</h2>
   <ul id="summary"></ul>
@@ -93,8 +99,8 @@
       });
     });
     // Initialize plots
-    Plotly.newPlot('wifi-chart', [{ x: [], y: [], type: 'bar' }], { title: 'Wi-Fi RSSI', xaxis: { title: 'SSID' }, yaxis: { title: 'RSSI (dBm)' } });
-    Plotly.newPlot('bluetooth-chart', [{ x: [], y: [], type: 'bar' }], { title: 'Bluetooth RSSI', xaxis: { title: 'Address' }, yaxis: { title: 'RSSI (dBm)' } });
+    Plotly.newPlot('wifi-chart', [{ x: [], y: [], type: 'bar', text: [], textposition: 'auto' }], { title: 'Wi-Fi RSSI', xaxis: { title: 'SSID' }, yaxis: { title: 'RSSI (dBm)' } });
+    Plotly.newPlot('bluetooth-chart', [{ x: [], y: [], type: 'bar', text: [], textposition: 'auto' }], { title: 'Bluetooth Distance (m)', xaxis: { title: 'Address' }, yaxis: { title: 'Distance (m)' } });
     const imuTrace = { x: [], y: [], type: 'scatter', mode: 'lines', name: 'Accel Magnitude' };
     Plotly.newPlot('imu-chart', [imuTrace], { title: 'IMU Acceleration Magnitude', xaxis: { title: 'Time' }, yaxis: { title: 'Magnitude' } });
 
@@ -121,13 +127,18 @@
       if (rec.sensor === 'wifi') {
         const ssids = rec.networks.map(n => n.ssid);
         const rssis = rec.networks.map(n => n.rssi);
-        Plotly.react('wifi-chart', [{ x: ssids, y: rssis, type: 'bar' }]);
+        Plotly.react('wifi-chart', [{ x: ssids, y: rssis, type: 'bar', text: rssis.map(String), textposition: 'auto' }]);
       }
-      // Update Bluetooth chart
+      // Update Bluetooth chart with estimated distances
       else if (rec.sensor === 'bluetooth') {
-        const addrs = rec.devices.map(d => d.address);
-        const rssis = rec.devices.map(d => d.rssi);
-        Plotly.react('bluetooth-chart', [{ x: addrs, y: rssis, type: 'bar' }]);
+        const labels = rec.devices.map(d => d.address);
+        const distances = rec.devices.map(d => {
+          // Estimate distance (m) from RSSI using path-loss model
+          const txPower = -59; // assumed RSSI at 1 meter
+          const pathLossExp = 2; // environmental factor
+          return Math.pow(10, (txPower - d.rssi) / (10 * pathLossExp));
+        });
+        Plotly.react('bluetooth-chart', [{ x: labels, y: distances, type: 'bar', text: distances.map(d => d.toFixed(2)), textposition: 'auto' }]);
       }
       // Update IMU chart
       else if (rec.sensor === 'imu') {
@@ -142,6 +153,17 @@
           imuTrace.y.shift();
           Plotly.relayout('imu-chart', { 'xaxis.range': [imuTrace.x[0], imuTrace.x[imuTrace.x.length - 1]] });
         }
+      }
+      // Display LLM analysis (show all analyses, marking anomalies)
+      if (msg.analysis) {
+        const analysisElem = document.getElementById('analysis');
+        const liAnalysis = document.createElement('li');
+        const tsAnalysis = new Date(rec.timestamp * 1000).toLocaleTimeString();
+        // Mark anomalies with a warning icon
+        const anomalyLabel = msg.analysis.anomaly ? '⚠️ ' : '';
+        const reasonText = msg.analysis.reason || '(no reason provided)';
+        liAnalysis.textContent = `[${tsAnalysis}] ${rec.sensor}: ${anomalyLabel}${reasonText}`;
+        analysisElem.prepend(liAnalysis);
       }
       // Display alerts
       const alerts = msg.alerts || [];

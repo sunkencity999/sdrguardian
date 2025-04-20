@@ -54,6 +54,7 @@ class WifiSensor(SensorPlugin):
                         check=True,
                     )
                     lines = result.stdout.splitlines()
+                    # Skip header and parse fixed-width columns: SSID [0:32], RSSI [49:55]
                     if len(lines) >= 2:
                         for line in lines[1:]:
                             if len(line) < 55:
