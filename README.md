@@ -4,7 +4,7 @@
 ![Platform](https://img.shields.io/badge/Platform-macOS%20|%20Linux-green)
 ![License](https://img.shields.io/badge/License-Military%20Use-red)
 
-SDRGuardian is an advanced Software Defined Radio (SDR) monitoring system designed for military applications. It leverages a device's built-in sensors (Wi-Fi, Bluetooth, IMU) to provide real-time RF spectrum analysis, threat detection, and situational awareness. The system combines sensor data with local LLM-powered analysis to identify potential threats and anomalies in the RF environment.
+SDRGuardian is an advanced Software Defined Radio (SDR) monitoring system designed for military applications. It leverages a device's built-in sensors (Wi-Fi, Bluetooth, IMU) to provide comprehensive security monitoring, including both cybersecurity and physical threat detection. The system combines sensor data with local LLM-powered analysis to identify potential threats in the RF environment and physical surroundings, offering military personnel complete situational awareness of their operational environment. By analyzing patterns in sensor data, SDRGuardian can detect unauthorized proximity, surveillance attempts, physical tampering, and other physical security threats without requiring additional hardware.
 
 ## Key Features
 
@@ -16,18 +16,29 @@ SDRGuardian is an advanced Software Defined Radio (SDR) monitoring system design
 - **IMU (Inertial Measurement Unit)**: Tracks device movement and orientation
 - **Association Monitoring**: Tracks device associations and connections
 
+### Physical Security Detection
+
+- **Proximity Threat Detection**: Identifies unauthorized devices in close proximity using Bluetooth signal strength
+- **Movement Pattern Analysis**: Detects devices showing surveillance patterns (following, circling, persistent presence)
+- **Device Tampering Detection**: Uses IMU sensor to detect unexpected orientation changes and impacts
+- **Vibration Detection**: Identifies unusual vibrations that might indicate someone approaching
+- **Surveillance Risk Assessment**: Analyzes device persistence and behavior to identify potential surveillance
+
 ### Analysis & Intelligence
 
 - **Real-time LLM Analysis**: Uses local LLMs via Ollama for on-device threat analysis
-- **Anomaly Detection**: Identifies unusual patterns in RF spectrum
-- **Threat Classification**: Categorizes potential threats based on signal characteristics
-- **Signal Correlation**: Correlates signals across different sensor types
+- **Anomaly Detection**: Identifies unusual patterns in RF spectrum and physical environment
+- **Threat Classification**: Categorizes potential threats as cyber, physical, or both
+- **Signal Correlation**: Correlates signals across different sensor types for comprehensive threat assessment
 
 ### User Interface
 
 - **Real-time Dashboard**: Web-based UI with live updates of sensor data
+- **Comprehensive Security Panels**: Dedicated panels for both cybersecurity and physical security monitoring
+- **Physical Security Metrics**: Visual indicators for proximity threats, movement detection, device tampering, and surveillance risk
 - **Interactive Charts**: Visual representation of RF spectrum and device activity
-- **Alert System**: Configurable alerts for detected threats
+- **Threat Type Classification**: Clear visual distinction between cyber threats, physical threats, or combined threats
+- **Alert System**: Configurable alerts for detected threats with threat type indication
 - **Responsive Design**: Works on various screen sizes for field operations
 
 ## System Requirements
@@ -138,6 +149,36 @@ python run.py --mode gui --port 8000
 ```
 
 Navigate to [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser to view the dashboard.
+
+## Physical Security Features
+
+SDRGuardian leverages existing sensors to provide comprehensive physical security monitoring without additional hardware:
+
+### Bluetooth-Based Physical Security
+
+- **Proximity Detection**: Uses Bluetooth signal strength (RSSI) to detect when unauthorized devices are in close proximity
+- **Movement Pattern Analysis**: Identifies devices that follow specific patterns indicative of surveillance
+- **Persistent Device Detection**: Flags devices that remain in range for extended periods, potentially indicating surveillance
+- **Device Density Monitoring**: Detects unusual gatherings of devices that may indicate physical threats
+
+### WiFi-Based Physical Security
+
+- **Device Density Analysis**: Monitors for unusual concentrations of devices in typically empty areas
+- **Signal Strength Monitoring**: Detects devices with unusually strong signals that may indicate close proximity
+- **Network Pattern Analysis**: Identifies unusual patterns in device connections that may indicate physical threats
+
+### IMU-Based Physical Security
+
+- **Vibration Detection**: Uses the device's accelerometer to detect vibrations from approaching personnel
+- **Orientation Change Monitoring**: Detects when someone may be physically tampering with the device
+- **Sudden Impact Detection**: Identifies sudden shocks that might indicate attempted physical access
+- **Movement Analysis**: Identifies unusual movement patterns that might indicate unauthorized handling
+
+### Integrated Threat Assessment
+
+- **Multi-Sensor Correlation**: Combines data from all sensors to provide a comprehensive physical security assessment
+- **Threat Classification**: Clearly identifies whether detected threats are cyber, physical, or both
+- **Actionable Recommendations**: Provides specific recommendations for responding to physical threats
 
 ## Configuration
 
