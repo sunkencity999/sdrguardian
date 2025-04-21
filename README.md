@@ -268,4 +268,4 @@ This software is provided for authorized use only. All rights reserved.
 
 ## Contact
 
-For support or inquiries, please contact the development team at [sdrguardian@robotbirdservices.com](mailto:sdrguardian@robotbirdservices.com).
+For support or inquiries, please contact the developer Christopher Bradford at [sdrguardian@robotbirdservices.com](mailto:sdrguardian@robotbirdservices.com).

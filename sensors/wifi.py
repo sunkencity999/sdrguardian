@@ -74,33 +74,30 @@ class WifiSensor(SensorPlugin):
                 print(f"Found Wi-Fi interface: {self.wifi_interface}")
                 
                 # Use modern tools for WiFi scanning
-                if shutil.which("wdutil"):
-                    self.scan_cmd = ["wdutil"]
-                    print("Using wdutil for WiFi scanning (recommended)")
-                    # Check if sudo is available
-                    if self.sudo_password:
-                        self.sudo_available = True
-                        print("Sudo password available for wdutil")
-                    else:
-                        # Try passwordless sudo
-                        try:
-                            sudo_test = subprocess.run(
-                                ["sudo", "-n", "echo", "test"],
-                                capture_output=True,
-                                text=True,
-                                check=False,
-                                timeout=1
-                            )
-                            self.sudo_available = sudo_test.returncode == 0
-                            if self.sudo_available:
-                                print("Passwordless sudo available for wdutil")
-                            else:
-                                print("WARNING: wdutil requires sudo privileges, which are not available")
-                        except Exception:
-                            self.sudo_available = False
-                elif shutil.which("system_profiler"):
+                if shutil.which("system_profiler"):
                     self.scan_cmd = ["system_profiler"]
                     print("Using system_profiler for WiFi scanning (recommended)")
+                elif shutil.which("wdutil"):
+                    self.scan_cmd = ["wdutil"]
+                    print("Using wdutil for WiFi scanning (requires sudo)")
+                    
+                    # Check if sudo is available without password
+                    try:
+                        sudo_test = subprocess.run(
+                            ["sudo", "-n", "echo", "test"],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                            timeout=1
+                        )
+                        self.sudo_available = sudo_test.returncode == 0
+                        if self.sudo_available:
+                            print("Passwordless sudo available for wdutil")
+                        else:
+                            print("WARNING: wdutil requires sudo privileges, which are not available")
+                    except:
+                        self.sudo_available = False
+                        print("WARNING: wdutil requires sudo privileges, which are not available")
                 else:
                     self.scan_cmd = ["networksetup"]
                     print("Using networksetup for WiFi scanning (limited)")
@@ -269,96 +266,108 @@ class WifiSensor(SensorPlugin):
             # Try system_profiler as a fallback
             elif self.scan_cmd[0] == "system_profiler":
                 print("Scanning for available WiFi networks using system_profiler...")
+                # Run system_profiler to get WiFi info
                 scan_result = subprocess.run(
                     ["system_profiler", "SPAirPortDataType"],
                     capture_output=True,
                     text=True,
                     check=False,
-                    timeout=5
+                    timeout=30  # Increased timeout to handle slow responses
                 )
                 
                 # Parse the system_profiler output
                 if scan_result and scan_result.stdout:
                     print(f"system_profiler output received, length: {len(scan_result.stdout)}")
-                    print(f"system_profiler output (truncated):\n{scan_result.stdout[:300]}...")
+                    # Print full output for debugging
+                    print(f"system_profiler full output:\n{scan_result.stdout}")
                     
-                    # Variables to track parsing state
-                    current_network = None
-                    in_wifi_section = False
-                    in_current_network_section = False
-                    in_other_networks_section = False
-                    current_ssid = None
+                    # Completely new approach to parsing system_profiler output
+                    # We'll use a more direct approach based on the exact output format
+                    output = scan_result.stdout
                     
-                    for line in scan_result.stdout.splitlines():
-                        line = line.strip()
-                        
-                        # Look for Wi-Fi section
-                        if "Wi-Fi:" in line:
-                            in_wifi_section = True
+                    # Use the approach validated by our parser test
+                    # First, find the current connected network if any
+                    lines = output.splitlines()
+                    unique_networks = set()  # Use a set to track unique network names
+                    
+                    # Check for current network
+                    in_current_section = False
+                    for i, line in enumerate(lines):
+                        if "Current Network Information:" in line:
+                            in_current_section = True
+                            print("Found 'Current Network Information' section")
                             continue
-                            
-                        # Look for current network section
-                        if in_wifi_section and "Current Network Information:" in line:
-                            in_current_network_section = True
-                            in_other_networks_section = False
-                            continue
-                            
-                        # Look for other networks section
-                        if in_wifi_section and "Other Local Wi-Fi Networks:" in line:
-                            in_current_network_section = False
-                            in_other_networks_section = True
-                            continue
-                            
-                        # Get current network SSID
-                        if in_current_network_section and line and ":" in line:
-                            parts = line.split(":")
-                            if len(parts) >= 1:
-                                current_ssid = parts[0].strip()
-                                if current_ssid and not any(n.get("ssid") == current_ssid for n in networks):
-                                    # Add current network
-                                    current_network = {
-                                        "ssid": current_ssid,
-                                        "rssi": -65,  # Default value until we find the actual signal strength
-                                        "connected": True
-                                    }
-                                    print(f"Found current network: {current_ssid}")
                         
-                        # Get signal strength for current network
-                        if in_current_network_section and "Signal / Noise:" in line and current_network:
-                            signal_match = re.search(r"Signal / Noise:\s*(-\d+)\s*dBm", line)
-                            if signal_match:
-                                current_network["rssi"] = int(signal_match.group(1))
-                                networks.append(current_network)
-                                print(f"Current network signal strength: {current_network['rssi']} dBm")
-                                current_network = None
+                        if in_current_section and line.startswith("            ") and line.strip().endswith(":"):
+                            # Make sure this is a network name, not a property
+                            if not any(prop in line for prop in ["Channel:", "Security:", "PHY Mode:", "Network Type:"]):
+                                ssid = line.strip().rstrip(':')
+                                print(f"Found current network: {ssid}")
+                                
+                                # Look for signal strength
+                                rssi = -65  # Default
+                                for j in range(i, min(i+10, len(lines))):
+                                    if "Signal / Noise:" in lines[j]:
+                                        signal_match = re.search(r"Signal / Noise:\s*(-\d+)\s*dBm", lines[j])
+                                        if signal_match:
+                                            rssi = int(signal_match.group(1))
+                                            break
+                                
+                                networks.append({
+                                    "ssid": ssid,
+                                    "rssi": rssi,
+                                    "connected": True
+                                })
+                                unique_networks.add(ssid)
+                                print(f"Added current network: {ssid} (RSSI: {rssi} dBm)")
+                                break
+                    
+                    # Now look for other networks
+                    in_other_networks = False
+                    for i, line in enumerate(lines):
+                        if "Other Local Wi-Fi Networks:" in line:
+                            in_other_networks = True
+                            print("Found 'Other Local Wi-Fi Networks' section")
+                            continue
                         
-                        # Parse other networks
-                        if in_other_networks_section and line and not line.startswith(" ") and ":" in line:
-                            parts = line.split(":")
-                            if len(parts) >= 1:
-                                ssid = parts[0].strip()
-                                if ssid and not any(n.get("ssid") == ssid for n in networks):
-                                    # Add other network
-                                    network_info = {
-                                        "ssid": ssid,
-                                        "rssi": -75,  # Default value
-                                        "connected": False
-                                    }
-                                    networks.append(network_info)
-                                    print(f"Found other network: {ssid}")
-                                    
-                        # Get signal strength for other networks
-                        if in_other_networks_section and "Signal / Noise:" in line and networks:
-                            signal_match = re.search(r"Signal / Noise:\s*(-\d+)\s*dBm", line)
-                            if signal_match and len(networks) > 0:
-                                # Update the most recently added network
-                                for network in reversed(networks):
-                                    if not network.get("connected", False):
-                                        network["rssi"] = int(signal_match.group(1))
-                                        print(f"Updated signal strength for {network['ssid']}: {network['rssi']} dBm")
+                        if in_other_networks and line.startswith("            ") and line.strip().endswith(":"):
+                            ssid = line.strip().rstrip(':')
+                            
+                            # Skip property lines and verify this is a network by checking for PHY Mode
+                            if not any(prop in line for prop in ["Channel:", "Security:", "PHY Mode:", "Network Type:"]):
+                                is_network = False
+                                for j in range(1, 5):
+                                    if i + j < len(lines) and "PHY Mode:" in lines[i + j]:
+                                        is_network = True
                                         break
+                                
+                                if is_network and ssid not in unique_networks:
+                                    # Look for signal strength
+                                    rssi = -75  # Default
+                                    for j in range(i, min(i+10, len(lines))):
+                                        if "Signal / Noise:" in lines[j]:
+                                            signal_match = re.search(r"Signal / Noise:\s*(-\d+)\s*dBm", lines[j])
+                                            if signal_match:
+                                                rssi = int(signal_match.group(1))
+                                                break
+                                    
+                                    networks.append({
+                                        "ssid": ssid,
+                                        "rssi": rssi,
+                                        "connected": False
+                                    })
+                                    unique_networks.add(ssid)
+                                    print(f"Added other network: {ssid} (RSSI: {rssi} dBm)")
             
-            success = True
+            # Print a summary of networks found
+            print(f"WiFi scan complete. Found {len(networks)} networks.")
+            if networks:
+                for i, network in enumerate(networks):
+                    print(f"  {i+1}. {network.get('ssid')} (RSSI: {network.get('rssi')} dBm, Connected: {network.get('connected')})")
+                success = True
+            else:
+                error_msg = "No WiFi networks detected despite hardware being available"
+                print(error_msg)
         except subprocess.TimeoutExpired:
             error_msg = "WiFi scan timed out"
         except Exception as e:

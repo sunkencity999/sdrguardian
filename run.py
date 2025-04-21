@@ -24,6 +24,20 @@ def find_available_port(start_port, max_attempts=5):
 def run_gui_server(port):
     """Run the GUI server on the specified port."""
     import uvicorn
+    import webbrowser
+    import threading
+    import time
+    
+    # Function to open browser after a short delay
+    def open_browser():
+        time.sleep(2)  # Wait for server to start
+        url = f"http://127.0.0.1:{port}"
+        print(f"Opening browser to {url}")
+        webbrowser.open(url)
+    
+    # Start browser in a separate thread
+    threading.Thread(target=open_browser).start()
+    
     try:
         print(f"Starting server on port {port}...")
         uvicorn.run("gui.main:app", host="127.0.0.1", port=port, reload=True)
