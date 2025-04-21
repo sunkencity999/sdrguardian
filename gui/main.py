@@ -99,23 +99,50 @@ async def post_settings(new_conf: dict):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    clients.add(websocket)
+    client_info = f"{websocket.client.host}:{websocket.client.port}"
+    print(f"New WebSocket connection attempt from {client_info}")
     try:
+        await websocket.accept()
+        print(f"WebSocket connection accepted from {client_info}")
+        clients.add(websocket)
+        print(f"Total active WebSocket connections: {len(clients)}")
+        
+        # Send a test message to confirm connection is working
+        await websocket.send_json({
+            "status": "connected", 
+            "timestamp": time.time(),
+            "message": "WebSocket connection established"
+        })
+        print(f"Sent connection confirmation to {client_info}")
+        
+        # Keep the connection alive
         while True:
-            # Keep connection alive
-            await websocket.receive_text()
+            data = await websocket.receive_text()
+            print(f"Received message from {client_info}: {data[:50]}..." if len(data) > 50 else f"Received message from {client_info}: {data}")
+            # Echo back to confirm receipt
+            await websocket.send_json({"status": "received", "timestamp": time.time()})
     except WebSocketDisconnect:
-        pass
+        print(f"WebSocket disconnected from {client_info}")
+    except Exception as e:
+        print(f"WebSocket error with {client_info}: {str(e)}")
+        import traceback
+        traceback.print_exc()
     finally:
-        clients.discard(websocket)
+        if websocket in clients:
+            clients.discard(websocket)
+            print(f"Removed {client_info} from clients. Remaining active connections: {len(clients)}")
 
 async def _broadcaster(llm_model, alert_conf):
     """
     Consume sensor records, run LLM analysis and rule checks, and broadcast to all clients.
     """
+    print("Broadcaster started and waiting for sensor data...")
     while True:
+        print("Waiting for data from sensors...")
         record = await queue.get()
+        sensor_type = record.get('sensor', 'unknown')
+        print(f"Received {sensor_type} data")
+        
         # Buffer for periodic summaries
         summary_buffer.append(record)
         # Programmatic detection of new devices/events
@@ -171,45 +198,81 @@ async def _broadcaster(llm_model, alert_conf):
                         'timestamp': ts,
                         'issue': f'Nearby smartphone detected: {name}{vendor_str}'
                     })
-        elif sensor == 'assoc':
-            global known_assoc
-            ssid = record.get('ssid')
-            if ssid and ssid != known_assoc:
-                prog_alerts.append({
-                    'sensor': 'assoc',
-                    'timestamp': ts,
-                    'issue': f'Connected to Wi-Fi network: {ssid}'
-                })
-                known_assoc = ssid
-        # analysis via LLM
+        
+        # Run LLM analysis if model is configured
         analysis = None
         if llm_model:
             try:
-                analysis = analyze(record, llm_model)
-            except Exception:
-                analysis = None
-        alerts_list = []
-        # Include programmatic alerts
-        alerts_list.extend(prog_alerts)
-        if isinstance(analysis, dict) and analysis.get("anomaly"):
-            alerts_list.append({
-                "sensor": record.get("sensor"),
-                "timestamp": record.get("timestamp"),
-                "reason": analysis.get("reason"),
-            })
-        try:
-            alerts_list.extend(check_alerts(record, alert_conf))
-        except Exception:
-            pass
-        message = {"record": record, "analysis": analysis, "alerts": alerts_list}
-        disconnected = set()
-        for ws in clients:
+                analysis = await asyncio.to_thread(analyze, record, llm_model)
+            except Exception as e:
+                print(f"LLM analysis error: {e}")
+        
+        # Check for alerts based on rules
+        alerts = []
+        if alert_conf and alert_conf.get("thresholds"):
+            alerts = check_alerts(record, alert_conf["thresholds"])
+        
+        # Prepare message to send to clients
+        # Ensure all required fields are present in the record
+        if sensor_type == 'wifi' and 'networks' not in record:
+            record['networks'] = []
+        elif sensor_type == 'bluetooth' and 'devices' not in record:
+            record['devices'] = []
+        elif sensor_type == 'imu' and 'accel' not in record:
+            record['accel'] = {'x': 0, 'y': 0, 'z': 0}
+            
+        # Ensure hardware_status is always present
+        if 'hardware_status' not in record:
+            record['hardware_status'] = 'unknown'
+            
+        message = {
+            "record": record,
+            "timestamp": time.time(),
+        }
+        
+        # Debug logging of the message content
+        print(f"Message content for {record.get('sensor', 'unknown')}:")
+        import json
+        print(json.dumps(message, indent=2, default=str))
+        if analysis:
+            message["analysis"] = analysis
+        if alerts:
+            message["alerts"] = alerts
+            # Also add to summary buffer for periodic summaries
+            for alert in alerts:
+                summary_buffer.append({
+                    "timestamp": record["timestamp"],
+                    "type": f"{record.get('sensor', 'unknown')}_alert",
+                    "description": alert["issue"] if "issue" in alert else alert.get("reason", "Unknown alert")
+                })
+        
+        client_count = len(clients)
+        print(f"Preparing to broadcast {record.get('sensor', 'unknown')} data to {client_count} clients")
+        
+        # Only proceed if there are clients connected
+        if client_count == 0:
+            print("No WebSocket clients connected. Data will not be displayed.")
+            continue
+            
+        # Make a copy of the clients set to avoid modification during iteration
+        current_clients = list(clients)
+        successful_broadcasts = 0
+        
+        # Broadcast to all connected clients
+        for ws in current_clients:
             try:
                 await ws.send_json(message)
-            except Exception:
-                disconnected.add(ws)
-        for ws in disconnected:
-            clients.discard(ws)
+                successful_broadcasts += 1
+            except WebSocketDisconnect:
+                print(f"Client disconnected during broadcast")
+                clients.discard(ws)
+            except Exception as e:
+                print(f"Error broadcasting to client: {str(e)}")
+                # Client might be disconnected, remove it
+                clients.discard(ws)
+        
+        print(f"Successfully broadcasted {record.get('sensor', 'unknown')} data to {successful_broadcasts}/{client_count} clients")
+
     
 async def _summary_scheduler(llm_model, interval: int):
     """
@@ -231,7 +294,8 @@ async def _summary_scheduler(llm_model, interval: int):
             continue
         message = {"summary": summary, "timestamp": time.time()}
         disconnected = set()
-        for ws in clients:
+        # Create a copy of the clients set to safely iterate over it
+        for ws in list(clients):
             try:
                 await ws.send_json(message)
             except Exception:

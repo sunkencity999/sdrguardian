@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>SDRGuardian Dashboard</title>
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.27.1.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     #charts { display: flex; flex-wrap: wrap; gap: 20px; }
@@ -13,27 +13,40 @@
     section { margin-bottom: 20px; }
     h3 { margin: 0 0 5px; }
     p.desc { margin: 0 0 10px; font-size: 0.9em; color: #555; }
+    .sensor-status { font-size: 0.9em; margin: 5px 0; padding: 3px 6px; border-radius: 3px; display: inline-block; }
+    .status-available { background-color: #d4edda; color: #155724; }
+    .status-unavailable { background-color: #f8d7da; color: #721c24; }
+    .status-error { background-color: #fff3cd; color: #856404; }
+    .status-unsupported { background-color: #e2e3e5; color: #383d41; }
+    #connection-status { position: fixed; top: 10px; right: 10px; padding: 5px 10px; border-radius: 4px; font-weight: bold; }
+    .connected { background-color: #d4edda; color: #155724; }
+    .connecting { background-color: #fff3cd; color: #856404; }
+    .disconnected { background-color: #f8d7da; color: #721c24; }
   </style>
 </head>
 <body>
   <h1>SDRGuardian Dashboard</h1>
+  <div id="connection-status" class="disconnected">Disconnected</div>
   <div id="charts">
     <section class="chart-section">
       <h3>Wi-Fi Networks</h3>
       <p class="desc">Detected SSID vs signal strength (RSSI in dBm).</p>
       <p class="key"><em>Key:</em> RSSI in dBm (higher is stronger signal).</p>
+      <div id="wifi-status"></div>
       <div id="wifi-chart" class="chart"></div>
     </section>
     <section class="chart-section">
       <h3>Bluetooth Devices</h3>
       <p class="desc">Discovered BLE device address vs estimated distance (meters).</p>
       <p class="key"><em>Key:</em> Estimated distance in meters (lower is closer).</p>
+      <div id="bluetooth-status"></div>
       <div id="bluetooth-chart" class="chart"></div>
     </section>
     <section class="chart-section">
       <h3>IMU Acceleration</h3>
       <p class="desc">Acceleration magnitude over time (m/s²).</p>
       <p class="key"><em>Key:</em> Magnitude of acceleration vector (m/s²).</p>
+      <div id="imu-status"></div>
       <div id="imu-chart" class="chart"></div>
     </section>
   </div>
@@ -58,7 +71,95 @@
     <button type="submit">Save Settings</button> <span id="settings-status"></span>
   </form>
   <script>
-    const ws = new WebSocket(`ws://${location.host}/ws`);
+    // Connection status management
+    const connectionStatus = document.getElementById('connection-status');
+    let ws = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    let reconnectInterval = 1000; // Start with 1 second
+    
+    function updateConnectionStatus(status, message = '') {
+      connectionStatus.className = status;
+      connectionStatus.textContent = message || status.charAt(0).toUpperCase() + status.slice(1);
+      console.log(`WebSocket: ${status} ${message}`);
+    }
+    
+    function connectWebSocket() {
+      if (ws !== null && ws.readyState !== WebSocket.CLOSED) {
+        console.log('WebSocket is already connected or connecting');
+        return;
+      }
+      
+      updateConnectionStatus('connecting', 'Connecting...');
+      
+      // Get the current protocol (http or https) and convert to ws or wss
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      // Get the host (hostname:port)
+      const host = window.location.host;
+      // Create the full WebSocket URL
+      const wsUrl = `${protocol}//${host}/ws`;
+      
+      console.log(`Attempting to connect to WebSocket at: ${wsUrl}`);
+      
+      // Create WebSocket connection
+      try {
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = function(event) {
+          console.log('WebSocket connection established');
+          updateConnectionStatus('connected');
+          reconnectAttempts = 0;
+          reconnectInterval = 1000;
+          
+          // Set up message handler immediately after connection
+          setupWebSocketHandlers(ws);
+          
+          // Send a ping to confirm two-way communication
+          ws.send(JSON.stringify({type: 'ping', timestamp: Date.now()}));
+        };
+        
+        ws.onclose = function(event) {
+          console.log('WebSocket connection closed', event);
+          updateConnectionStatus('disconnected');
+          
+          // Attempt to reconnect with exponential backoff
+          if (reconnectAttempts < maxReconnectAttempts) {
+            setTimeout(function() {
+              reconnectAttempts++;
+              console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})`);
+              connectWebSocket();
+              reconnectInterval *= 2; // Exponential backoff
+            }, reconnectInterval);
+          } else {
+            updateConnectionStatus('disconnected', 'Failed to connect - please refresh page');
+          }
+        };
+        
+        ws.onerror = function(error) {
+          console.error('WebSocket error:', error);
+          updateConnectionStatus('disconnected', 'Connection error');
+        };
+      } catch (error) {
+        console.error('Error creating WebSocket:', error);
+        updateConnectionStatus('disconnected', 'Failed to create connection');
+      }
+    }
+    
+    // Initialize WebSocket connection when page is fully loaded
+    window.addEventListener('load', function() {
+      console.log('Page loaded, connecting WebSocket...');
+      connectWebSocket();
+      
+      // Make sure the message handler is assigned after connection
+      setTimeout(function() {
+        if (ws) {
+          setupWebSocketHandlers(ws);
+        } else {
+          console.error('WebSocket not initialized after timeout');
+        }
+      }, 500);
+    });
+    
     // Load current settings
     fetch('/settings')
       .then(res => res.json())
@@ -104,54 +205,182 @@
     const imuTrace = { x: [], y: [], type: 'scatter', mode: 'lines', name: 'Accel Magnitude' };
     Plotly.newPlot('imu-chart', [imuTrace], { title: 'IMU Acceleration Magnitude', xaxis: { title: 'Time' }, yaxis: { title: 'Magnitude' } });
 
-    ws.onmessage = event => {
-      const msg = JSON.parse(event.data);
-      // Handle periodic summary messages
-      if (msg.summary) {
-        const summElem = document.getElementById('summary');
-        const events = msg.summary.events || [];
-        events.forEach(e => {
-          const li = document.createElement('li');
-          const ts = e.timestamp
-            ? new Date(e.timestamp * 1000).toLocaleTimeString()
-            : new Date(msg.timestamp * 1000).toLocaleTimeString();
-          const type = e.type || e.sensor || 'event';
-          const desc = e.description || JSON.stringify(e);
-          li.textContent = `[${ts}] ${type}: ${desc}`;
-          summElem.prepend(li);
-        });
-        return;
-      }
-      const rec = msg.record;
+    // Handle incoming WebSocket messages
+    function handleWebSocketMessage(event) {
+      try {
+        const msg = JSON.parse(event.data);
+        
+        // Log the received message with more detail
+        console.log('Received message type:', msg.record ? msg.record.sensor : (msg.status || 'unknown'));
+        console.log('Message content:', JSON.stringify(msg, null, 2));
+        
+        // Debug the structure of the message
+        if (msg.record) {
+          console.log('Record structure:', Object.keys(msg.record));
+          if (msg.record.sensor === 'wifi') {
+            console.log('WiFi networks structure:', msg.record.networks);
+            console.log('WiFi hardware status:', msg.record.hardware_status);
+          } else if (msg.record.sensor === 'bluetooth') {
+            console.log('Bluetooth devices structure:', msg.record.devices);
+            console.log('Bluetooth hardware status:', msg.record.hardware_status);
+          } else if (msg.record.sensor === 'imu') {
+            console.log('IMU data structure:', msg.record.accel);
+            console.log('IMU hardware status:', msg.record.hardware_status);
+          }
+        }
+        
+        // Handle status messages (connection confirmation, etc.)
+        if (msg.status && !msg.record) {
+          console.log('Status message received:', msg.status);
+          return;
+        }
+        
+        // Handle periodic summary messages
+        if (msg.summary) {
+          const summElem = document.getElementById('summary');
+          const events = msg.summary.events || [];
+          events.forEach(e => {
+            const li = document.createElement('li');
+            const ts = e.timestamp
+              ? new Date(e.timestamp * 1000).toLocaleTimeString()
+              : new Date(msg.timestamp * 1000).toLocaleTimeString();
+            const type = e.type || e.sensor || 'event';
+            const desc = e.description || JSON.stringify(e);
+            li.textContent = `[${ts}] ${type}: ${desc}`;
+            summElem.prepend(li);
+          });
+          return;
+        }
+        
+        // Handle sensor data messages
+        if (!msg.record) {
+          console.log('Message has no record data, ignoring for chart updates');
+          return;
+        }
+        
+        const rec = msg.record;
       // Update Wi-Fi chart
       if (rec.sensor === 'wifi') {
-        const ssids = rec.networks.map(n => n.ssid);
-        const rssis = rec.networks.map(n => n.rssi);
-        Plotly.react('wifi-chart', [{ x: ssids, y: rssis, type: 'bar', text: rssis.map(String), textposition: 'auto' }]);
+        // Update hardware status display
+        const wifiStatusElem = document.getElementById('wifi-status');
+        const status = rec.hardware_status || 'unknown';
+        wifiStatusElem.innerHTML = `<span class="sensor-status status-${status}">Hardware: ${status}</span>`;
+        if (rec.error) {
+          wifiStatusElem.innerHTML += `<br><span class="error-message">${rec.error}</span>`;
+        }
+        
+        // Only update chart if we have data
+        console.log('WiFi networks:', rec.networks);
+        if (rec.networks && Array.isArray(rec.networks) && rec.networks.length > 0) {
+          const ssids = rec.networks.map(n => n.ssid || 'Unknown');
+          const rssis = rec.networks.map(n => n.rssi);
+          console.log('Updating WiFi chart with SSIDs:', ssids, 'RSSIs:', rssis);
+          
+          // Check if we have valid data
+          if (ssids.length > 0 && rssis.length > 0 && !rssis.some(r => r === undefined || r === null)) {
+            Plotly.react('wifi-chart', [{ x: ssids, y: rssis, type: 'bar', text: rssis.map(String), textposition: 'auto' }]);
+          } else {
+            console.log('Invalid WiFi data, showing unavailable message');
+            showHardwareUnavailableMessage('wifi', status, rec.error);
+          }
+        } else {
+          console.log('No WiFi networks data to display');
+          // Show hardware unavailable message or clear the chart
+          showHardwareUnavailableMessage('wifi', status, rec.error || 'No networks found');
+        }
       }
       // Update Bluetooth chart with estimated distances
       else if (rec.sensor === 'bluetooth') {
-        const labels = rec.devices.map(d => d.address);
-        const distances = rec.devices.map(d => {
-          // Estimate distance (m) from RSSI using path-loss model
-          const txPower = -59; // assumed RSSI at 1 meter
-          const pathLossExp = 2; // environmental factor
-          return Math.pow(10, (txPower - d.rssi) / (10 * pathLossExp));
-        });
-        Plotly.react('bluetooth-chart', [{ x: labels, y: distances, type: 'bar', text: distances.map(d => d.toFixed(2)), textposition: 'auto' }]);
+        // Update hardware status display
+        const btStatusElem = document.getElementById('bluetooth-status');
+        const status = rec.hardware_status || 'unknown';
+        btStatusElem.innerHTML = `<span class="sensor-status status-${status}">Hardware: ${status}</span>`;
+        if (rec.error) {
+          btStatusElem.innerHTML += `<br><span class="error-message">${rec.error}</span>`;
+        }
+        
+        // Only update chart if we have data
+        console.log('Bluetooth devices:', rec.devices);
+        if (rec.devices && Array.isArray(rec.devices) && rec.devices.length > 0) {
+          const labels = rec.devices.map(d => d.address || 'Unknown');
+          const distances = rec.devices.map(d => {
+            // Estimate distance (m) from RSSI using path-loss model
+            const txPower = -59; // assumed RSSI at 1 meter
+            const pathLossExp = 2; // environmental factor
+            // Check if RSSI is a valid number and not -100 (default value)
+            if (typeof d.rssi === 'number' && d.rssi !== -100) {
+              return Math.pow(10, (txPower - d.rssi) / (10 * pathLossExp));
+            } else {
+              // If RSSI is -100 (default value), show a more reasonable distance estimate
+              return 10; // Default to 10 meters when RSSI is unavailable
+            }
+          });
+          console.log('Updating Bluetooth chart with addresses:', labels, 'distances:', distances);
+          
+          // Check if we have valid data
+          if (labels.length > 0 && distances.length > 0 && !distances.some(d => d === undefined || d === null)) {
+            Plotly.react('bluetooth-chart', [{ x: labels, y: distances, type: 'bar', text: distances.map(d => d.toFixed(2)), textposition: 'auto' }]);
+          } else {
+            console.log('Invalid Bluetooth data, showing unavailable message');
+            showHardwareUnavailableMessage('bluetooth', status, rec.error);
+          }
+        } else {
+          console.log('No Bluetooth devices data to display');
+          // Show hardware unavailable message
+          showHardwareUnavailableMessage('bluetooth', status, rec.error || 'No devices found');
+        }
       }
       // Update IMU chart
       else if (rec.sensor === 'imu') {
-        const a = rec.accel;
-        const mag = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
-        const t = new Date(rec.timestamp * 1000).toLocaleTimeString();
-        imuTrace.x.push(t);
-        imuTrace.y.push(mag);
-        Plotly.extendTraces('imu-chart', { x: [[t]], y: [[mag]] }, [0]);
-        if (imuTrace.x.length > 50) {
-          imuTrace.x.shift();
-          imuTrace.y.shift();
-          Plotly.relayout('imu-chart', { 'xaxis.range': [imuTrace.x[0], imuTrace.x[imuTrace.x.length - 1]] });
+        // Update hardware status display
+        const imuStatusElem = document.getElementById('imu-status');
+        const status = rec.hardware_status || 'unknown';
+        imuStatusElem.innerHTML = `<span class="sensor-status status-${status}">Hardware: ${status}</span>`;
+        if (rec.error) {
+          imuStatusElem.innerHTML += `<br><span class="error-message">${rec.error}</span>`;
+        }
+        
+        // Only update chart if we have acceleration data
+        console.log('IMU data:', rec.accel);
+        if (rec.accel && typeof rec.accel === 'object') {
+          const a = rec.accel;
+          // Make sure we have valid x, y, z values
+          if (typeof a.x === 'number' && typeof a.y === 'number' && typeof a.z === 'number') {
+            const mag = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+            const t = new Date(rec.timestamp * 1000).toLocaleTimeString();
+            console.log('Updating IMU chart with time:', t, 'magnitude:', mag);
+            
+            // Initialize the trace if it doesn't exist
+            if (!imuTrace.x || !imuTrace.y) {
+              imuTrace.x = [];
+              imuTrace.y = [];
+            }
+            
+            imuTrace.x.push(t);
+            imuTrace.y.push(mag);
+            
+            try {
+              Plotly.extendTraces('imu-chart', { x: [[t]], y: [[mag]] }, [0]);
+              if (imuTrace.x.length > 50) {
+                imuTrace.x.shift();
+                imuTrace.y.shift();
+                Plotly.relayout('imu-chart', { 'xaxis.range': [imuTrace.x[0], imuTrace.x[imuTrace.x.length - 1]] });
+              }
+            } catch (error) {
+              console.error('Error updating IMU chart:', error);
+              // If extending fails, recreate the chart
+              Plotly.react('imu-chart', [{ x: imuTrace.x, y: imuTrace.y, type: 'scatter', mode: 'lines', name: 'Accel Magnitude' }], 
+                { title: 'IMU Acceleration Magnitude', xaxis: { title: 'Time' }, yaxis: { title: 'Magnitude' } });
+            }
+          } else {
+            console.log('IMU data has invalid acceleration values:', a);
+            showHardwareUnavailableMessage('imu', status, rec.error || 'Invalid acceleration data');
+          }
+        } else {
+          console.log('No IMU acceleration data to display');
+          // Show hardware unavailable message
+          showHardwareUnavailableMessage('imu', status, rec.error || 'No acceleration data');
+          // Keep any existing real data visible
         }
       }
       // Display LLM analysis (show all analyses, marking anomalies)
@@ -175,7 +404,74 @@
         li.textContent = `[${ts}] ${a.sensor}: ${txt}`;
         alertsElem.prepend(li);
       });
-    };
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+      }
+    }
+    
+    // This function will be called when the WebSocket is created
+    function setupWebSocketHandlers(socket) {
+      if (!socket) return;
+      
+      console.log('Setting up WebSocket message handler');
+      socket.onmessage = handleWebSocketMessage;
+    }
+    
+    // Function to display a clear message when hardware is unavailable
+    function showHardwareUnavailableMessage(sensorType, status, errorMsg) {
+      console.log(`Hardware status for ${sensorType}: ${status}, error: ${errorMsg || 'none'}`);
+      
+      // Add a clear warning message to the chart
+      const chartId = `${sensorType}-chart`;
+      const chartElement = document.getElementById(chartId);
+      
+      if (chartElement) {
+        // Clear any existing data
+        if (sensorType === 'wifi') {
+          Plotly.react(chartId, [{ x: [], y: [], type: 'bar', text: [], textposition: 'auto' }]);
+        } else if (sensorType === 'bluetooth') {
+          Plotly.react(chartId, [{ x: [], y: [], type: 'bar', text: [], textposition: 'auto' }]);
+        } else if (sensorType === 'imu' && (!imuTrace.x || imuTrace.x.length === 0)) {
+          // Only clear IMU if there's no data
+          Plotly.react(chartId, [{ x: [], y: [], type: 'scatter', mode: 'lines' }]);
+        }
+        
+        // Determine the message to display
+        let message = 'NO DATA AVAILABLE';
+        if (status === 'error') {
+          message += ` - ${errorMsg || 'HARDWARE ERROR'}`;
+        } else if (status === 'unavailable') {
+          message += ' - HARDWARE UNAVAILABLE';
+        } else if (status === 'unsupported') {
+          message += ' - HARDWARE UNSUPPORTED';
+        }
+        
+        // Add an annotation to the center of the chart
+        try {
+          Plotly.relayout(chartId, {
+            annotations: [{
+              text: message,
+              showarrow: false,
+              font: {
+                size: 16,
+                color: '#721c24'
+              },
+              xref: 'paper',
+              yref: 'paper',
+              x: 0.5,
+              y: 0.5,
+              xanchor: 'center',
+              yanchor: 'middle'
+            }]
+          });
+        } catch (error) {
+          console.error(`Error adding annotation to ${sensorType} chart:`, error);
+        }
+        
+        return true;
+      }
+      return false;
+    }
   </script>
 </body>
 </html>

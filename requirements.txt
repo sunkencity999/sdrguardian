@@ -6,3 +6,4 @@ pyyaml
 websockets
 psutil
 python-dotenv
+requests

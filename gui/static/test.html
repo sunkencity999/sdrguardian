@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>SDRGuardian WebSocket Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #log { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+    #status { padding: 5px 10px; border-radius: 4px; font-weight: bold; }
+    .connected { background-color: #d4edda; color: #155724; }
+    .connecting { background-color: #fff3cd; color: #856404; }
+    .disconnected { background-color: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+  <h1>SDRGuardian WebSocket Test</h1>
+  <div id="status" class="disconnected">Disconnected</div>
+  <div id="log"></div>
+  <button id="connect">Connect</button>
+  <button id="disconnect" disabled>Disconnect</button>
+  
+  <script>
+    const logElement = document.getElementById('log');
+    const statusElement = document.getElementById('status');
+    const connectButton = document.getElementById('connect');
+    const disconnectButton = document.getElementById('disconnect');
+    
+    let ws = null;
+    
+    function log(message) {
+      const entry = document.createElement('div');
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      logElement.appendChild(entry);
+      logElement.scrollTop = logElement.scrollHeight;
+      console.log(message);
+    }
+    
+    function updateStatus(status, message = '') {
+      statusElement.className = status;
+      statusElement.textContent = message || status.charAt(0).toUpperCase() + status.slice(1);
+      log(`WebSocket: ${status} ${message}`);
+    }
+    
+    function connect() {
+      if (ws !== null && ws.readyState !== WebSocket.CLOSED) {
+        log('WebSocket is already connected or connecting');
+        return;
+      }
+      
+      updateStatus('connecting', 'Connecting...');
+      
+      // Get the current host and port
+      const host = window.location.host;
+      log(`Connecting to WebSocket at ws://${host}/ws`);
+      
+      // Create WebSocket connection
+      ws = new WebSocket(`ws://${host}/ws`);
+      
+      ws.onopen = function(event) {
+        log('WebSocket connection established');
+        updateStatus('connected');
+        connectButton.disabled = true;
+        disconnectButton.disabled = false;
+      };
+      
+      ws.onclose = function(event) {
+        log(`WebSocket connection closed (code: ${event.code}, reason: ${event.reason})`);
+        updateStatus('disconnected');
+        connectButton.disabled = false;
+        disconnectButton.disabled = true;
+      };
+      
+      ws.onerror = function(error) {
+        log('WebSocket error occurred');
+        updateStatus('disconnected', 'Connection error');
+      };
+      
+      ws.onmessage = function(event) {
+        try {
+          const data = JSON.parse(event.data);
+          log(`Received message: ${JSON.stringify(data)}`);
+        } catch (e) {
+          log(`Received non-JSON message: ${event.data}`);
+        }
+      };
+    }
+    
+    function disconnect() {
+      if (ws === null || ws.readyState === WebSocket.CLOSED) {
+        log('WebSocket is not connected');
+        return;
+      }
+      
+      log('Closing WebSocket connection');
+      ws.close();
+    }
+    
+    connectButton.addEventListener('click', connect);
+    disconnectButton.addEventListener('click', disconnect);
+    
+    // Auto-connect on page load
+    window.addEventListener('load', connect);
+  </script>
+</body>
+</html>
