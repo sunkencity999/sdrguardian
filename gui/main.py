@@ -40,7 +40,6 @@ app.add_middleware(
 )
 
 # Connected WebSocket clients
-# Connected WebSocket clients
 clients: set[WebSocket] = set()
 ## Programmatic state tracking
 known_ssids: set[str] = set()
@@ -48,6 +47,8 @@ known_bt: set[str] = set()
 known_assoc: Optional[str] = None
 # Buffer for periodic summaries
 summary_buffer: list[dict] = []
+# Background tasks
+background_tasks = set()
 # Queue for incoming sensor data
 queue: asyncio.Queue = asyncio.Queue()
 # Tracking and summary buffers
@@ -68,11 +69,42 @@ async def startup_event():
     for name, cls in SENSOR_CLASSES.items():
         conf = config.get(name, {})
         sensor = cls(conf)
-        asyncio.create_task(sensor.start(queue))
+        task = asyncio.create_task(sensor.start(queue))
+        background_tasks.add(task)
+        task.add_done_callback(background_tasks.discard)
+    
     summary_interval = config.get('summary_interval', 300)
     # Start broadcaster and periodic summary tasks
-    asyncio.create_task(_broadcaster(llm_model, alert_conf))
-    asyncio.create_task(_summary_scheduler(llm_model, summary_interval))
+    broadcaster_task = asyncio.create_task(_broadcaster(llm_model, alert_conf))
+    background_tasks.add(broadcaster_task)
+    broadcaster_task.add_done_callback(background_tasks.discard)
+    
+    summary_task = asyncio.create_task(_summary_scheduler(llm_model, summary_interval))
+    background_tasks.add(summary_task)
+    summary_task.add_done_callback(background_tasks.discard)
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    print("Shutting down server...")
+    # Close all WebSocket connections
+    for websocket in clients.copy():
+        try:
+            await websocket.close(code=1000, reason="Server shutdown")
+        except Exception as e:
+            print(f"Error closing WebSocket: {e}")
+    
+    # Cancel all background tasks
+    for task in background_tasks:
+        try:
+            task.cancel()
+        except Exception as e:
+            print(f"Error canceling task: {e}")
+    
+    # Wait for all tasks to complete
+    if background_tasks:
+        await asyncio.gather(*background_tasks, return_exceptions=True)
+    
+    print("Server shutdown complete. All resources released.")
 
 @app.get("/health")
 async def health():

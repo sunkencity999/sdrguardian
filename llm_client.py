@@ -42,20 +42,41 @@ def analyze(record: dict, model: str):
     """
     Sends the record to the local Ollama LLM for analysis.
     """
-    # Construct an instruction prompt for anomaly detection with emphasis on security and JSON format
+    # Construct an enhanced instruction prompt for anomaly detection with emphasis on security and JSON format
     instruction = (
         "You are a military-grade cybersecurity analyst monitoring sensor data from a Software Defined Radio system. "
         "For the following record, analyze if there are any security implications or anomalies with absolute precision. "
-        "This is for a military application where accuracy is critical. "
-        "Consider: unauthorized device proximity, potential surveillance drones, suspicious network activity, signal interference, "
-        "unauthorized access points, spoofed networks, or unusual motion patterns that could indicate security threats.\n\n"
+        "This is for a military application where accuracy is critical.\n\n"
+        
+        "For WiFi data, analyze for:\n"
+        "- Rogue/unauthorized access points (unexpected SSIDs or duplicate SSIDs with different security)\n"
+        "- Evil twin attacks (duplicate networks with similar names but different security settings)\n"
+        "- Unusual signal strengths (unexpectedly strong signals that might indicate proximity)\n"
+        "- Open networks in secure areas (potential security risk)\n"
+        "- Networks with weak security protocols (WEP, open)\n"
+        "- Suspicious naming patterns that might indicate surveillance\n"
+        "- Sudden appearance of new networks in previously stable environments\n"
+        "- Disappearance of previously stable networks (could indicate jamming)\n\n"
+        
+        "For Bluetooth data, analyze for:\n"
+        "- Unexpected devices with very strong signal strength (indicating close proximity)\n"
+        "- Devices with suspicious names (surveillance equipment, drones, unknown devices)\n"
+        "- Devices that appear to be spoofing legitimate device names\n"
+        "- Persistent unknown devices that follow location changes\n"
+        "- Bluetooth devices with unusual manufacturer data\n"
+        "- Patterns suggesting Bluetooth tracking or surveillance\n"
+        "- Bluetooth beacons in unexpected locations\n\n"
+        
         "IMPORTANT: Your response MUST be a valid JSON object with EXACTLY these keys:\n"
         "- 'anomaly': boolean (true/false) - indicate if there is a potential security threat\n"
         "- 'reason': string (precise, factual description of the finding)\n"
         "- 'threat_level': string (must be one of: 'low', 'medium', 'high') - assess based on military security standards\n"
-        "- 'recommendation': string (specific action to take based on military security protocols)\n\n"
+        "- 'recommendation': string (specific action to take based on military security protocols)\n"
+        "- 'details': object (containing specific findings that led to this assessment)\n\n"
+        
         "If you cannot make a determination due to insufficient data, indicate this clearly in the 'reason' field "
         "and set 'anomaly' to false and 'threat_level' to 'low'.\n\n"
+        
         "DO NOT include any explanations, markdown formatting, or text outside the JSON object. "
         "DO NOT fabricate or invent data that is not present in the record."
     )
@@ -87,6 +108,9 @@ def analyze(record: dict, model: str):
             # Validate that the JSON has the required keys
             required_keys = ['anomaly', 'reason', 'threat_level', 'recommendation']
             if all(key in json_result for key in required_keys):
+                # Add details field if it doesn't exist
+                if 'details' not in json_result:
+                    json_result['details'] = {}
                 return json_result
         
         # If we couldn't extract valid JSON or it's missing required keys
@@ -150,17 +174,41 @@ def summarize(records: list, model: str, instruction: str = None):
     if instruction is None:
         instruction = (
             "You are a military-grade cybersecurity and situational awareness analyst reviewing recent sensor data from Wi-Fi, Bluetooth, IMU, and network I/O.\n\n"
-            "This analysis is for a critical military application where accuracy and precision are essential. "
-            "Identify and summarize with absolute precision: unauthorized devices in proximity, new or changed Wi-Fi networks, "
-            "devices joining local networks, unusually high data transfer rates, potential signal jamming, "
-            "and any signals indicating surveillance or reconnaissance (e.g., drone SSIDs, suspicious device names, unusual signal patterns).\n\n"
+            "This analysis is for a critical military application where accuracy and precision are essential.\n\n"
+            
+            "ANALYZE WIFI DATA FOR SECURITY THREATS:\n"
+            "- Evil Twin Attacks: Look for duplicate SSIDs with different security settings\n"
+            "- Rogue Access Points: Identify unexpected networks or those with suspicious naming patterns\n"
+            "- Deauthentication Attacks: Note networks that repeatedly appear and disappear\n"
+            "- Weak Security: Flag networks using outdated security (WEP, Open)\n"
+            "- Signal Anomalies: Identify unusually strong signals that could indicate close proximity\n"
+            "- Surveillance Networks: Look for SSIDs matching patterns used by surveillance equipment\n"
+            "- Historical Changes: Compare with previous scans to identify new or missing networks\n\n"
+            
+            "ANALYZE BLUETOOTH DATA FOR SECURITY THREATS:\n"
+            "- Proximity Threats: Identify devices with very strong signal strength (RSSI > -50dBm)\n"
+            "- Suspicious Devices: Flag devices with names suggesting drones, cameras, or surveillance equipment\n"
+            "- Persistent Trackers: Note devices that consistently appear across multiple scans\n"
+            "- Spoofed Devices: Identify devices that may be impersonating known trusted devices\n"
+            "- Bluetooth Beacons: Detect unexpected beacon activity in secure areas\n"
+            "- Unknown Manufacturers: Flag devices with unrecognized manufacturer data\n"
+            "- Bluetooth Sniffers: Look for devices that might be capturing Bluetooth traffic\n\n"
+            
+            "CORRELATE DATA ACROSS SENSORS:\n"
+            "- Look for relationships between WiFi and Bluetooth anomalies\n"
+            "- Consider physical movement patterns from IMU data that coincide with network changes\n"
+            "- Identify patterns suggesting coordinated surveillance or monitoring\n"
+            "- Flag situations where multiple low-risk indicators combine to suggest higher risk\n\n"
+            
             "IMPORTANT: Your response MUST be a valid JSON object with EXACTLY this structure:\n"
             "{ \"events\": [ \n"
             "    { \n"
             "        \"timestamp\": (number, current unix timestamp),\n"
-            "        \"type\": (string, specific event type),\n"
+            "        \"type\": (string, specific event type - e.g., 'evil_twin_detected', 'rogue_ap', 'suspicious_bluetooth', 'proximity_alert'),\n"
+            "        \"sensor\": (string, which sensor detected this - 'wifi', 'bluetooth', 'imu', or 'correlated'),\n"
             "        \"level\": (string, must be one of: \"info\", \"warning\", \"critical\") - assess based on military security standards,\n"
             "        \"description\": (string, precise factual description),\n"
+            "        \"affected_devices\": (array of strings, identifiers of relevant devices/networks),\n"
             "        \"recommendation\": (string, specific action based on military security protocols)\n"
             "    }\n"
             "]}\n\n"
@@ -200,6 +248,14 @@ def summarize(records: list, model: str, instruction: str = None):
                 if not all(key in event for key in required_keys):
                     valid_events = False
                     break
+                
+                # Add sensor field if missing
+                if 'sensor' not in event:
+                    event['sensor'] = 'unknown'
+                
+                # Add affected_devices field if missing
+                if 'affected_devices' not in event:
+                    event['affected_devices'] = []
             
             if valid_events:
                 return json_result

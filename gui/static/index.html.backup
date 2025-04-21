@@ -51,26 +51,48 @@
 </head>
 <body>
   <h1>SDRGuardian Dashboard</h1>
-  <div id="connection-status" class="connecting">Connecting...</div>
-  
+  <div id="connection-status" class="disconnected">Disconnected</div>
+  <div id="charts">
+    <section class="chart-section">
+      <h3>Wi-Fi Networks</h3>
+      <p class="desc">Detected SSID vs signal strength (RSSI in dBm).</p>
+      <p class="key"><em>Key:</em> RSSI in dBm (higher is stronger signal).</p>
+      <div id="wifi-status"></div>
+      <div id="wifi-chart" class="chart"></div>
+    </section>
+    <section class="chart-section">
+      <h3>Bluetooth Devices</h3>
+      <p class="desc">Discovered BLE device address vs estimated distance (meters).</p>
+      <p class="key"><em>Key:</em> Estimated distance in meters (lower is closer).</p>
+      <div id="bluetooth-status"></div>
+      <div id="bluetooth-chart" class="chart"></div>
+    </section>
+    <section class="chart-section">
+      <h3>IMU Acceleration</h3>
+      <p class="desc">Acceleration magnitude over time (m/s²).</p>
+      <p class="key"><em>Key:</em> Magnitude of acceleration vector (m/s²).</p>
+      <div id="imu-status"></div>
+      <div id="imu-chart" class="chart"></div>
+    </section>
+  </div>
   <section id="security-section">
     <h2>Security Analysis</h2>
-    <div id="security-status" class="status-info">Monitoring for security threats...</div>
+    <div id="security-status" class="status-info">Monitoring for threats...</div>
     
     <div id="security-dashboard">
       <div class="security-panel">
         <h3>WiFi Security</h3>
         <div id="wifi-security-alerts" class="security-alerts">
-          <p>No alerts at this time</p>
+          <p>No WiFi security alerts detected</p>
         </div>
         <div class="security-metrics">
           <div class="metric">
             <span class="metric-label">Evil Twin Risk:</span>
-            <span id="wifi-evil-twin-risk" class="metric-value">Low</span>
+            <span id="wifi-evil-twin-risk" class="metric-value risk-low">Low</span>
           </div>
           <div class="metric">
             <span class="metric-label">Rogue AP Risk:</span>
-            <span id="wifi-rogue-ap-risk" class="metric-value">Low</span>
+            <span id="wifi-rogue-ap-risk" class="metric-value risk-low">Low</span>
           </div>
           <div class="metric">
             <span class="metric-label">Open Networks:</span>
@@ -82,12 +104,12 @@
       <div class="security-panel">
         <h3>Bluetooth Security</h3>
         <div id="bluetooth-security-alerts" class="security-alerts">
-          <p>No alerts at this time</p>
+          <p>No Bluetooth security alerts detected</p>
         </div>
         <div class="security-metrics">
           <div class="metric">
-            <span class="metric-label">Proximity Risk:</span>
-            <span id="bt-proximity-risk" class="metric-value">Low</span>
+            <span class="metric-label">Proximity Threats:</span>
+            <span id="bt-proximity-risk" class="metric-value risk-low">Low</span>
           </div>
           <div class="metric">
             <span class="metric-label">Unknown Devices:</span>
@@ -102,59 +124,30 @@
     </div>
     
     <div id="threat-timeline">
-      <h3>Security Event Timeline</h3>
+      <h3>Threat Timeline</h3>
       <div id="timeline-container">
-        <p>No security events detected</p>
+        <p>No recent security events</p>
       </div>
     </div>
   </section>
-  
-  <section id="charts">
-    <div class="chart-section">
-      <h3>Wi-Fi Networks</h3>
-      <p class="desc">Detected networks and signal strength (RSSI)</p>
-      <div id="wifi-status"><span class="sensor-status status-unavailable">Hardware: unavailable</span></div>
-      <div id="wifi-chart" class="chart"></div>
-    </div>
-    
-    <div class="chart-section">
-      <h3>Bluetooth Devices</h3>
-      <p class="desc">Detected devices and estimated distance (meters)</p>
-      <div id="bluetooth-status"><span class="sensor-status status-unavailable">Hardware: unavailable</span></div>
-      <div id="bluetooth-chart" class="chart"></div>
-    </div>
-    
-    <div class="chart-section">
-      <h3>IMU Data</h3>
-      <p class="desc">Acceleration magnitude over time</p>
-      <div id="imu-status"><span class="sensor-status status-unavailable">Hardware: unavailable</span></div>
-      <div id="imu-chart" class="chart"></div>
-    </div>
-  </section>
-  
-  <section>
-    <h3>LLM Analysis</h3>
-    <ul id="analysis"></ul>
-  </section>
-  
-  <section>
-    <h3>Summary</h3>
-    <ul id="summary"></ul>
-  </section>
-  
-  <section>
-    <h3>Alerts</h3>
-    <ul id="alerts"></ul>
-  </section>
-  
-  <h3>Settings</h3>
+
+  <h2>Alerts</h2>
+  <ul id="alerts"></ul>
+
+  <h2>LLM Analysis</h2>
+  <ul id="analysis"></ul>
+
+  <h2>Summary</h2>
+  <ul id="summary"></ul>
+
+  <h2>Settings</h2>
   <form id="settings-form">
-    <label>WiFi Interval (s): <input type="number" step="0.1" id="wifi-interval"/></label><br/>
-    <label>Bluetooth Interval (s): <input type="number" step="0.1" id="bluetooth-interval"/></label><br/>
-    <label>IMU Interval (s): <input type="number" step="0.1" id="imu-interval"/></label><br/>
+    <label>Wi-Fi Interval (s): <input type="number" id="wifi-interval" step="0.1"/></label><br/>
+    <label>Bluetooth Interval (s): <input type="number" id="bluetooth-interval" step="0.1"/></label><br/>
+    <label>IMU Interval (s): <input type="number" id="imu-interval" step="0.1"/></label><br/>
     <label>LLM Model: <input type="text" id="llm-model"/></label><br/>
-    <label>WiFi RSSI Min: <input type="number" step="0.1" id="wifi-rssi-min"/></label><br/>
-    <label>Bluetooth RSSI Min: <input type="number" step="0.1" id="bt-rssi-min"/></label><br/>
+    <label>Wi-Fi RSSI Min: <input type="number" id="wifi-rssi-min"/></label><br/>
+    <label>Bluetooth RSSI Min: <input type="number" id="bt-rssi-min"/></label><br/>
     <label>IMU Accel Max: <input type="number" step="0.1" id="imu-accel-max"/></label><br/>
     <button type="submit">Save Settings</button> <span id="settings-status"></span>
   </form>
@@ -354,16 +347,16 @@
     window.addEventListener('load', function() {
       console.log('Page loaded, connecting WebSocket...');
       connectWebSocket();
-      
-      // Make sure the message handler is assigned after connection
-      setTimeout(function() {
-        if (ws) {
-          setupWebSocketHandlers(ws);
-        } else {
-          console.error('WebSocket not initialized after timeout');
-        }
-      }, 500);
     });
+      
+    // Make sure the message handler is assigned after connection
+    setTimeout(function() {
+      if (ws) {
+        setupWebSocketHandlers(ws);
+      } else {
+        console.error('WebSocket not initialized after timeout');
+      }
+    }, 500);
     
     // Load current settings
     fetch('/settings')
@@ -449,195 +442,199 @@
         }
         
         // Handle summary
-        if (msg.type === 'summary') {
-          const summaryEl = document.getElementById('summary');
-          // Clear previous summary
-          summaryEl.innerHTML = '';
+      if (msg.type === 'summary') {
+        const summaryEl = document.getElementById('summary');
+        // Clear previous summary
+        summaryEl.innerHTML = '';
+        
+        // Add each event to the summary
+        if (msg.summary && msg.summary.events && msg.summary.events.length > 0) {
+          // Update the security timeline with events
+          updateSecurityTimeline(msg.summary.events);
           
-          // Add each event to the summary
-          if (msg.summary && msg.summary.events && msg.summary.events.length > 0) {
-            // Update the security timeline with events
-            updateSecurityTimeline(msg.summary.events);
-            
-            msg.summary.events.forEach(event => {
-              const li = document.createElement('li');
-              li.innerHTML = `<strong>${event.type}:</strong> ${event.description} (Level: ${event.level})<br>Recommendation: ${event.recommendation}`;
-              li.style.color = event.level === 'critical' ? 'red' : event.level === 'warning' ? 'orange' : 'blue';
-              summaryEl.appendChild(li);
-            });
-          } else {
+          msg.summary.events.forEach(event => {
             const li = document.createElement('li');
-            li.textContent = 'No significant events detected.';
+            li.innerHTML = `<strong>${event.type}:</strong> ${event.description} (Level: ${event.level})<br>Recommendation: ${event.recommendation}`;
+            li.style.color = event.level === 'critical' ? 'red' : event.level === 'warning' ? 'orange' : 'blue';
             summaryEl.appendChild(li);
-          }
-          return;
-        }
-        
-        // Handle sensor data messages
-        const rec = msg.record;
-        if (!rec) {
-          console.log('Message has no record data, ignoring for chart updates');
-          return;
-        }
-        
-        // Handle sensor data messages
-        if (rec.sensor) {
-          // Update Wi-Fi chart
-          if (rec.sensor === 'wifi') {
-            // Update hardware status display
-            const wifiStatusElem = document.getElementById('wifi-status');
-            const status = rec.hardware_status || 'unknown';
-            wifiStatusElem.innerHTML = `<span class="sensor-status status-${status}">Hardware: ${status}</span>`;
-            if (rec.error) {
-              wifiStatusElem.innerHTML += `<br><span class="error-message">${rec.error}</span>`;
-            }
-            
-            // Only update chart if we have data
-            console.log('WiFi networks:', rec.networks);
-            if (rec.networks && Array.isArray(rec.networks) && rec.networks.length > 0) {
-              const ssids = rec.networks.map(n => n.ssid || 'Unknown');
-              const rssis = rec.networks.map(n => n.rssi);
-              console.log('Updating WiFi chart with SSIDs:', ssids, 'RSSIs:', rssis);
-              
-              // Check if we have valid data
-              if (ssids.length > 0 && rssis.length > 0 && !rssis.some(r => r === undefined || r === null)) {
-                Plotly.react('wifi-chart', [{ x: ssids, y: rssis, type: 'bar', text: rssis.map(String), textposition: 'auto' }]);
-              } else {
-                console.log('Invalid WiFi data, showing unavailable message');
-                showHardwareUnavailableMessage('wifi', status, rec.error);
-              }
-            } else {
-              console.log('No WiFi networks data to display');
-              // Show hardware unavailable message or clear the chart
-              showHardwareUnavailableMessage('wifi', status, rec.error || 'No networks found');
-            }
-          }
-          // Update Bluetooth chart with estimated distances
-          else if (rec.sensor === 'bluetooth') {
-            // Update hardware status display
-            const btStatusElem = document.getElementById('bluetooth-status');
-            const status = rec.hardware_status || 'unknown';
-            btStatusElem.innerHTML = `<span class="sensor-status status-${status}">Hardware: ${status}</span>`;
-            if (rec.error) {
-              btStatusElem.innerHTML += `<br><span class="error-message">${rec.error}</span>`;
-            }
-            
-            // Only update chart if we have data
-            console.log('Bluetooth devices:', rec.devices);
-            if (rec.devices && Array.isArray(rec.devices) && rec.devices.length > 0) {
-              const labels = rec.devices.map(d => d.address || 'Unknown');
-              const distances = rec.devices.map(d => {
-                // Estimate distance (m) from RSSI using path-loss model
-                const txPower = -59; // assumed RSSI at 1 meter
-                const pathLossExp = 2; // environmental factor
-                // Check if RSSI is a valid number and not -100 (default value)
-                if (typeof d.rssi === 'number' && d.rssi !== -100) {
-                  return Math.pow(10, (txPower - d.rssi) / (10 * pathLossExp));
-                } else {
-                  // If RSSI is -100 (default value), show a more reasonable distance estimate
-                  return 10; // Default to 10 meters when RSSI is unavailable
-                }
-              });
-              console.log('Updating Bluetooth chart with addresses:', labels, 'distances:', distances);
-              
-              // Check if we have valid data
-              if (labels.length > 0 && distances.length > 0 && !distances.some(d => d === undefined || d === null)) {
-                Plotly.react('bluetooth-chart', [{ x: labels, y: distances, type: 'bar', text: distances.map(d => d.toFixed(2)), textposition: 'auto' }]);
-              } else {
-                console.log('Invalid Bluetooth data, showing unavailable message');
-                showHardwareUnavailableMessage('bluetooth', status, rec.error);
-              }
-            } else {
-              console.log('No Bluetooth devices data to display');
-              // Show hardware unavailable message
-              showHardwareUnavailableMessage('bluetooth', status, rec.error || 'No devices found');
-            }
-          }
-          // Update IMU chart
-          else if (rec.sensor === 'imu') {
-            // Update hardware status display
-            const imuStatusElem = document.getElementById('imu-status');
-            const status = rec.hardware_status || 'unknown';
-            imuStatusElem.innerHTML = `<span class="sensor-status status-${status}">Hardware: ${status}</span>`;
-            if (rec.error) {
-              imuStatusElem.innerHTML += `<br><span class="error-message">${rec.error}</span>`;
-            }
-            
-            // Only update chart if we have acceleration data
-            console.log('IMU data:', rec.accel);
-            if (rec.accel && typeof rec.accel === 'object') {
-              const a = rec.accel;
-              // Make sure we have valid x, y, z values
-              if (typeof a.x === 'number' && typeof a.y === 'number' && typeof a.z === 'number') {
-                const mag = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
-                const t = new Date(rec.timestamp * 1000).toLocaleTimeString();
-                console.log('Updating IMU chart with time:', t, 'magnitude:', mag);
-                
-                // Initialize the trace if it doesn't exist
-                if (!imuTrace.x || !imuTrace.y) {
-                  imuTrace.x = [];
-                  imuTrace.y = [];
-                }
-                
-                imuTrace.x.push(t);
-                imuTrace.y.push(mag);
-                
-                try {
-                  Plotly.extendTraces('imu-chart', { x: [[t]], y: [[mag]] }, [0]);
-                  if (imuTrace.x.length > 50) {
-                    imuTrace.x.shift();
-                    imuTrace.y.shift();
-                    Plotly.relayout('imu-chart', { 'xaxis.range': [imuTrace.x[0], imuTrace.x[imuTrace.x.length - 1]] });
-                  }
-                } catch (error) {
-                  console.error('Error updating IMU chart:', error);
-                  // If extending fails, recreate the chart
-                  Plotly.react('imu-chart', [{ x: imuTrace.x, y: imuTrace.y, type: 'scatter', mode: 'lines', name: 'Accel Magnitude' }], 
-                    { title: 'IMU Acceleration Magnitude', xaxis: { title: 'Time' }, yaxis: { title: 'Magnitude' } });
-                }
-              } else {
-                console.log('IMU data has invalid acceleration values:', a);
-                showHardwareUnavailableMessage('imu', status, rec.error || 'Invalid acceleration data');
-              }
-            } else {
-              console.log('No IMU acceleration data to display');
-              // Show hardware unavailable message
-              showHardwareUnavailableMessage('imu', status, rec.error || 'No acceleration data');
-              // Keep any existing real data visible
-            }
-          }
-        }
-      
-        // Handle LLM analysis
-        if (msg.type === 'analysis') {
-          const analysisEl = document.getElementById('analysis');
-          // Clear previous analysis
-          analysisEl.innerHTML = '';
-          
-          // Add the new analysis
+          });
+        } else {
           const li = document.createElement('li');
-          if (msg.analysis.anomaly) {
-            li.innerHTML = `<strong>ANOMALY DETECTED:</strong> ${msg.analysis.reason} (Threat Level: ${msg.analysis.threat_level})<br>Recommendation: ${msg.analysis.recommendation}`;
-            li.style.color = msg.analysis.threat_level === 'high' ? 'red' : msg.analysis.threat_level === 'medium' ? 'orange' : 'black';
-            
-            // Update security dashboard
-            updateSecurityDashboard(msg.analysis);
-          } else {
-            li.innerHTML = `<strong>No anomalies detected.</strong> ${msg.analysis.reason}`;
-          }
-          analysisEl.appendChild(li);
+          li.textContent = 'No significant events detected.';
+          summaryEl.appendChild(li);
+        }
+      }
+      return;
         }
         
-        // Display alerts
-        const alerts = msg.alerts || [];
-        const alertsElem = document.getElementById('alerts');
-        alerts.forEach(alert => {
-          const liAlert = document.createElement('li');
-          liAlert.textContent = alert;
-          alertsElem.prepend(liAlert);
-        });
+        // Handle sensor data messages
+        if (!msg.record) {
+          console.log('Message has no record data, ignoring for chart updates');
+{{ ... }}
+          // Show hardware unavailable message
+          showHardwareUnavailableMessage('imu', status, rec.error || 'No acceleration data');
+          // Keep any existing real data visible
+        }
+      }
+      
+      // Handle sensor data messages
+      if (rec && rec.sensor) {
+        // Update Wi-Fi chart
+        if (rec.sensor === 'wifi') {
+          // Update hardware status display
+          const wifiStatusElem = document.getElementById('wifi-status');
+          const status = rec.hardware_status || 'unknown';
+          wifiStatusElem.innerHTML = `<span class="sensor-status status-${status}">Hardware: ${status}</span>`;
+          if (rec.error) {
+            wifiStatusElem.innerHTML += `<br><span class="error-message">${rec.error}</span>`;
+          }
+          
+          // Only update chart if we have data
+          console.log('WiFi networks:', rec.networks);
+          if (rec.networks && Array.isArray(rec.networks) && rec.networks.length > 0) {
+            const ssids = rec.networks.map(n => n.ssid || 'Unknown');
+            const rssis = rec.networks.map(n => n.rssi);
+            console.log('Updating WiFi chart with SSIDs:', ssids, 'RSSIs:', rssis);
+            
+            // Check if we have valid data
+            if (ssids.length > 0 && rssis.length > 0 && !rssis.some(r => r === undefined || r === null)) {
+              Plotly.react('wifi-chart', [{ x: ssids, y: rssis, type: 'bar', text: rssis.map(String), textposition: 'auto' }]);
+            } else {
+              console.log('Invalid WiFi data, showing unavailable message');
+              showHardwareUnavailableMessage('wifi', status, rec.error);
+            }
+          } else {
+            console.log('No WiFi networks data to display');
+            // Show hardware unavailable message or clear the chart
+            showHardwareUnavailableMessage('wifi', status, rec.error || 'No networks found');
+          }
+        }
+        // Update Bluetooth chart with estimated distances
+        else if (rec.sensor === 'bluetooth') {
+          // Update hardware status display
+          const btStatusElem = document.getElementById('bluetooth-status');
+          const status = rec.hardware_status || 'unknown';
+          btStatusElem.innerHTML = `<span class="sensor-status status-${status}">Hardware: ${status}</span>`;
+          if (rec.error) {
+            btStatusElem.innerHTML += `<br><span class="error-message">${rec.error}</span>`;
+          }
+          
+          // Only update chart if we have data
+          console.log('Bluetooth devices:', rec.devices);
+          if (rec.devices && Array.isArray(rec.devices) && rec.devices.length > 0) {
+            const labels = rec.devices.map(d => d.address || 'Unknown');
+            const distances = rec.devices.map(d => {
+              // Estimate distance (m) from RSSI using path-loss model
+              const txPower = -59; // assumed RSSI at 1 meter
+              const pathLossExp = 2; // environmental factor
+              // Check if RSSI is a valid number and not -100 (default value)
+              if (typeof d.rssi === 'number' && d.rssi !== -100) {
+                return Math.pow(10, (txPower - d.rssi) / (10 * pathLossExp));
+              } else {
+                // If RSSI is -100 (default value), show a more reasonable distance estimate
+                return 10; // Default to 10 meters when RSSI is unavailable
+              }
+            });
+            console.log('Updating Bluetooth chart with addresses:', labels, 'distances:', distances);
+            
+            // Check if we have valid data
+            if (labels.length > 0 && distances.length > 0 && !distances.some(d => d === undefined || d === null)) {
+              Plotly.react('bluetooth-chart', [{ x: labels, y: distances, type: 'bar', text: distances.map(d => d.toFixed(2)), textposition: 'auto' }]);
+            } else {
+              console.log('Invalid Bluetooth data, showing unavailable message');
+              showHardwareUnavailableMessage('bluetooth', status, rec.error);
+            }
+          } else {
+            console.log('No Bluetooth devices data to display');
+            // Show hardware unavailable message
+            showHardwareUnavailableMessage('bluetooth', status, rec.error || 'No devices found');
+          }
+        }
+        // Update IMU chart
+        else if (rec.sensor === 'imu') {
+          // Update hardware status display
+          const imuStatusElem = document.getElementById('imu-status');
+          const status = rec.hardware_status || 'unknown';
+          imuStatusElem.innerHTML = `<span class="sensor-status status-${status}">Hardware: ${status}</span>`;
+          if (rec.error) {
+            imuStatusElem.innerHTML += `<br><span class="error-message">${rec.error}</span>`;
+          }
+          
+          // Only update chart if we have acceleration data
+          console.log('IMU data:', rec.accel);
+          if (rec.accel && typeof rec.accel === 'object') {
+            const a = rec.accel;
+            // Make sure we have valid x, y, z values
+            if (typeof a.x === 'number' && typeof a.y === 'number' && typeof a.z === 'number') {
+              const mag = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+              const t = new Date(rec.timestamp * 1000).toLocaleTimeString();
+              console.log('Updating IMU chart with time:', t, 'magnitude:', mag);
+              
+              // Initialize the trace if it doesn't exist
+              if (!imuTrace.x || !imuTrace.y) {
+                imuTrace.x = [];
+                imuTrace.y = [];
+              }
+              
+              imuTrace.x.push(t);
+              imuTrace.y.push(mag);
+              
+              try {
+                Plotly.extendTraces('imu-chart', { x: [[t]], y: [[mag]] }, [0]);
+                if (imuTrace.x.length > 50) {
+                  imuTrace.x.shift();
+                  imuTrace.y.shift();
+                  Plotly.relayout('imu-chart', { 'xaxis.range': [imuTrace.x[0], imuTrace.x[imuTrace.x.length - 1]] });
+                }
+              } catch (error) {
+                console.error('Error updating IMU chart:', error);
+                // If extending fails, recreate the chart
+                Plotly.react('imu-chart', [{ x: imuTrace.x, y: imuTrace.y, type: 'scatter', mode: 'lines', name: 'Accel Magnitude' }], 
+                  { title: 'IMU Acceleration Magnitude', xaxis: { title: 'Time' }, yaxis: { title: 'Magnitude' } });
+              }
+            } else {
+              console.log('IMU data has invalid acceleration values:', a);
+              showHardwareUnavailableMessage('imu', status, rec.error || 'Invalid acceleration data');
+            }
+          } else {
+            console.log('No IMU acceleration data to display');
+            // Show hardware unavailable message
+            showHardwareUnavailableMessage('imu', status, rec.error || 'No acceleration data');
+            // Keep any existing real data visible
+          }
+        }
+      }
+      // Display LLM analysis (show all analyses,      // Handle LLM analysis
+      if (msg.type === 'analysis') {
+        const analysisEl = document.getElementById('analysis');
+        // Clear previous analysis
+        analysisEl.innerHTML = '';
+        
+        // Add the new analysis
+        const li = document.createElement('li');
+        if (msg.analysis.anomaly) {
+          li.innerHTML = `<strong>ANOMALY DETECTED:</strong> ${msg.analysis.reason} (Threat Level: ${msg.analysis.threat_level})<br>Recommendation: ${msg.analysis.recommendation}`;
+          li.style.color = msg.analysis.threat_level === 'high' ? 'red' : msg.analysis.threat_level === 'medium' ? 'orange' : 'black';
+          
+          // Update security dashboard
+          updateSecurityDashboard(msg.analysis);
+        } else {
+          li.innerHTML = `<strong>No anomalies detected.</strong> ${msg.analysis.reason}`;
+        }
+        analysisEl.appendChild(li);
+      }
+      // Display alerts
+      const alerts = msg.alerts || [];
+      const alertsElem = document.getElementById('alerts');
+      alerts.forEach(a => {
+        const li = document.createElement('li');
+        const ts = new Date(a.timestamp * 1000).toLocaleTimeString();
+        const txt = a.issue || a.reason || JSON.stringify(a);
+        li.textContent = `[${ts}] ${a.sensor}: ${txt}`;
+        alertsElem.prepend(li);
+      });
       } catch (error) {
-        console.error('Error handling WebSocket message:', error);
+        console.error('Error processing WebSocket message:', error);
       }
     }
     

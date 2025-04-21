@@ -42,7 +42,7 @@ fi
 # Run the Python script in GUI mode by default if no arguments are provided
 if [ $# -eq 0 ]; then
     echo "Starting in GUI mode..."
-    python run.py --mode gui
+    python run.py --mode gui --port 9000
 else
     python run.py "$@"
 fi
