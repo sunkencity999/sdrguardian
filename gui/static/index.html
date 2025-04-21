@@ -99,6 +99,31 @@
           </div>
         </div>
       </div>
+      
+      <div class="security-panel">
+        <h3>Physical Security</h3>
+        <div id="physical-security-alerts" class="security-alerts">
+          <p>No alerts at this time</p>
+        </div>
+        <div class="security-metrics">
+          <div class="metric">
+            <span class="metric-label">Proximity Threat:</span>
+            <span id="physical-proximity-threat" class="metric-value">Low</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Movement Detection:</span>
+            <span id="physical-movement" class="metric-value">None</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Device Tampering:</span>
+            <span id="physical-tampering" class="metric-value">None</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Surveillance Risk:</span>
+            <span id="physical-surveillance" class="metric-value">Low</span>
+          </div>
+        </div>
+      </div>
     </div>
     
     <div id="threat-timeline">
@@ -237,19 +262,28 @@
     function updateSecurityDashboard(analysis) {
       const securityStatus = document.getElementById('security-status');
       
-      // Update overall security status
+      // Update overall security status with threat type indication
+      let threatTypeText = '';
+      if (analysis.threat_type) {
+        threatTypeText = analysis.threat_type === 'both' ? 
+          ' [CYBER & PHYSICAL THREAT]' : 
+          analysis.threat_type === 'physical' ? 
+            ' [PHYSICAL THREAT]' : 
+            ' [CYBER THREAT]';
+      }
+      
       if (analysis.threat_level === 'high') {
         securityStatus.className = 'status-unavailable';
-        securityStatus.textContent = 'CRITICAL SECURITY THREAT DETECTED! ' + analysis.reason;
+        securityStatus.textContent = 'CRITICAL SECURITY THREAT DETECTED!' + threatTypeText + ' ' + analysis.reason;
       } else if (analysis.threat_level === 'medium') {
         securityStatus.className = 'status-error';
-        securityStatus.textContent = 'Security Warning: ' + analysis.reason;
+        securityStatus.textContent = 'Security Warning:' + threatTypeText + ' ' + analysis.reason;
       } else {
         securityStatus.className = 'status-info';
         securityStatus.textContent = analysis.reason;
       }
       
-      // Check if this is WiFi or Bluetooth related
+      // Check if this is WiFi, Bluetooth, or Physical related
       if (analysis.details) {
         // Update WiFi security metrics if present
         if (analysis.details.wifi) {
@@ -318,6 +352,49 @@
             } else {
               suspiciousNames.className = 'metric-value';
             }
+          }
+        }
+        
+        // Update Physical security metrics if present
+        if (analysis.details.physical) {
+          const physicalAlerts = document.getElementById('physical-security-alerts');
+          const proximityThreat = document.getElementById('physical-proximity-threat');
+          const movementDetection = document.getElementById('physical-movement');
+          const deviceTampering = document.getElementById('physical-tampering');
+          const surveillanceRisk = document.getElementById('physical-surveillance');
+          
+          // Update Physical alerts
+          if (analysis.details.physical.alert) {
+            physicalAlerts.innerHTML = `<p class="alert-${analysis.details.physical.severity || 'info'}">${analysis.details.physical.alert}</p>`;
+          }
+          
+          // Update risk indicators
+          if (analysis.details.physical.proximity_threat) {
+            proximityThreat.textContent = analysis.details.physical.proximity_threat;
+            proximityThreat.className = `metric-value risk-${analysis.details.physical.proximity_threat.toLowerCase()}`;
+          }
+          
+          if (analysis.details.physical.movement_detection) {
+            movementDetection.textContent = analysis.details.physical.movement_detection;
+            if (analysis.details.physical.movement_detection !== 'None') {
+              movementDetection.className = 'metric-value risk-medium';
+            } else {
+              movementDetection.className = 'metric-value';
+            }
+          }
+          
+          if (analysis.details.physical.device_tampering) {
+            deviceTampering.textContent = analysis.details.physical.device_tampering;
+            if (analysis.details.physical.device_tampering !== 'None') {
+              deviceTampering.className = 'metric-value risk-high';
+            } else {
+              deviceTampering.className = 'metric-value';
+            }
+          }
+          
+          if (analysis.details.physical.surveillance_risk) {
+            surveillanceRisk.textContent = analysis.details.physical.surveillance_risk;
+            surveillanceRisk.className = `metric-value risk-${analysis.details.physical.surveillance_risk.toLowerCase()}`;
           }
         }
       }
@@ -617,7 +694,17 @@
           // Add the new analysis
           const li = document.createElement('li');
           if (msg.analysis.anomaly) {
-            li.innerHTML = `<strong>ANOMALY DETECTED:</strong> ${msg.analysis.reason} (Threat Level: ${msg.analysis.threat_level})<br>Recommendation: ${msg.analysis.recommendation}`;
+            // Add threat type indicator
+            let threatTypeIndicator = '';
+            if (msg.analysis.threat_type) {
+              threatTypeIndicator = msg.analysis.threat_type === 'both' ? 
+                ' [CYBER & PHYSICAL THREAT]' : 
+                msg.analysis.threat_type === 'physical' ? 
+                  ' [PHYSICAL THREAT]' : 
+                  ' [CYBER THREAT]';
+            }
+            
+            li.innerHTML = `<strong>ANOMALY DETECTED:${threatTypeIndicator}</strong> ${msg.analysis.reason} (Threat Level: ${msg.analysis.threat_level})<br>Recommendation: ${msg.analysis.recommendation}`;
             li.style.color = msg.analysis.threat_level === 'high' ? 'red' : msg.analysis.threat_level === 'medium' ? 'orange' : 'black';
             
             // Update security dashboard

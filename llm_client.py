@@ -44,8 +44,9 @@ def analyze(record: dict, model: str):
     """
     # Construct an enhanced instruction prompt for anomaly detection with emphasis on security and JSON format
     instruction = (
-        "You are a military-grade cybersecurity analyst monitoring sensor data from a Software Defined Radio system. "
-        "For the following record, analyze if there are any security implications or anomalies with absolute precision. "
+        "You are a military-grade security analyst monitoring sensor data from a Software Defined Radio system. "
+        "For the following record, analyze if there are any security implications or anomalies with absolute precision, "
+        "including both cybersecurity threats AND physical security threats. "
         "This is for a military application where accuracy is critical.\n\n"
         
         "For WiFi data, analyze for:\n"
@@ -56,7 +57,10 @@ def analyze(record: dict, model: str):
         "- Networks with weak security protocols (WEP, open)\n"
         "- Suspicious naming patterns that might indicate surveillance\n"
         "- Sudden appearance of new networks in previously stable environments\n"
-        "- Disappearance of previously stable networks (could indicate jamming)\n\n"
+        "- Disappearance of previously stable networks (could indicate jamming)\n"
+        "- PHYSICAL THREATS: Unusual density of devices in an area (indicating gathering of people)\n"
+        "- PHYSICAL THREATS: Movement patterns of devices suggesting unauthorized physical approach\n"
+        "- PHYSICAL THREATS: New devices appearing in typically empty or secure spaces\n\n"
         
         "For Bluetooth data, analyze for:\n"
         "- Unexpected devices with very strong signal strength (indicating close proximity)\n"
@@ -65,14 +69,30 @@ def analyze(record: dict, model: str):
         "- Persistent unknown devices that follow location changes\n"
         "- Bluetooth devices with unusual manufacturer data\n"
         "- Patterns suggesting Bluetooth tracking or surveillance\n"
-        "- Bluetooth beacons in unexpected locations\n\n"
+        "- Bluetooth beacons in unexpected locations\n"
+        "- PHYSICAL THREATS: Devices that remain in proximity for extended periods (possible surveillance)\n"
+        "- PHYSICAL THREATS: Devices showing movement patterns that suggest following or circling\n"
+        "- PHYSICAL THREATS: Sudden appearance of multiple new devices (possible group approach)\n\n"
+        
+        "For IMU data, analyze for:\n"
+        "- PHYSICAL THREATS: Unusual vibrations or movements that might indicate someone approaching\n"
+        "- PHYSICAL THREATS: Unexpected orientation changes that might indicate physical tampering\n"
+        "- PHYSICAL THREATS: Movement patterns consistent with being carried by someone unauthorized\n"
+        "- PHYSICAL THREATS: Sudden impacts or shocks that might indicate attempted access\n\n"
+        
+        "When analyzing for physical threats, consider:\n"
+        "- Correlations between different sensor types (e.g., Bluetooth proximity + IMU movement)\n"
+        "- Timing patterns that might indicate coordinated physical approach\n"
+        "- Signal strength changes that suggest movement toward or away from the device\n"
+        "- Persistence of signals that might indicate sustained surveillance\n\n"
         
         "IMPORTANT: Your response MUST be a valid JSON object with EXACTLY these keys:\n"
-        "- 'anomaly': boolean (true/false) - indicate if there is a potential security threat\n"
+        "- 'anomaly': boolean (true/false) - indicate if there is a potential security threat (cyber or physical)\n"
         "- 'reason': string (precise, factual description of the finding)\n"
         "- 'threat_level': string (must be one of: 'low', 'medium', 'high') - assess based on military security standards\n"
+        "- 'threat_type': string (must be one of: 'cyber', 'physical', 'both') - indicate the nature of the threat\n"
         "- 'recommendation': string (specific action to take based on military security protocols)\n"
-        "- 'details': object (containing specific findings that led to this assessment)\n\n"
+        "- 'details': object (containing specific findings that led to this assessment, including physical threat indicators)\n\n"
         
         "If you cannot make a determination due to insufficient data, indicate this clearly in the 'reason' field "
         "and set 'anomaly' to false and 'threat_level' to 'low'.\n\n"
